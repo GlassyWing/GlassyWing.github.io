@@ -1,0 +1,381 @@
+<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><meta name="description" content="使用Spark DataFrame实现基于物品的协同过滤算法(ItemCF)"><meta name="keywords" content="spark,ItemCF,协同过滤算法,基于物品"><meta name="author" content="manlier,undefined"><meta name="copyright" content="manlier"><title>使用Spark DataFrame实现基于物品的协同过滤算法(ItemCF) | manlier的个人博客</title><link rel="shortcut icon" href="/favicon.ico"><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.min.css?version=1.5.1"><link rel="stylesheet" type="text/css" href="https://unpkg.com/gitalk/dist/gitalk.css"><script src="https://unpkg.com/gitalk@latest/dist/gitalk.min.js"></script><script src="https://unpkg.com/blueimp-md5@latest/js/md5.min.js"></script><link rel="manifest"><script>(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-116653944-1', 'auto');
+ga('send', 'pageview');</script><script>var GLOBAL = { 
+  root: '/',
+  algolia: undefined,
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  localSearch: {"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}"},"path":"search.xml"}
+} </script></head><body><canvas class="fireworks"></canvas><i class="fa fa-arrow-right" id="toggle-sidebar" aria-hidden="true"></i><div id="sidebar"><div class="toggle-sidebar-info text-center"><span data-toggle="切换文章详情">切换站点概览</span><hr></div><div class="sidebar-toc"><div class="sidebar-toc__title">目录</div><div class="sidebar-toc__progress"><span class="progress-notice">你已经读了</span><span class="progress-num">0</span><span class="progress-percentage">%</span><div class="sidebar-toc__progress-bar"></div></div><div class="sidebar-toc__content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#使用Spark-DataFrame实现基于物品的协同过滤算法-ItemCF"><span class="toc-number">1.</span> <span class="toc-text">使用Spark DataFrame实现基于物品的协同过滤算法(ItemCF)</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#简介"><span class="toc-number">1.1.</span> <span class="toc-text">简介</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#前提"><span class="toc-number">1.2.</span> <span class="toc-text">前提</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#常用相似度计算公式"><span class="toc-number">1.3.</span> <span class="toc-text">常用相似度计算公式</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#同现相似度-Co-Occurrence"><span class="toc-number">1.3.1.</span> <span class="toc-text">同现相似度(Co Occurrence)</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#同现相似度公式"><span class="toc-number">1.3.1.1.</span> <span class="toc-text">同现相似度公式</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#改进的同现相似度公式"><span class="toc-number">1.3.1.2.</span> <span class="toc-text">改进的同现相似度公式</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#欧几里得相似度-Eucledian-Similarity"><span class="toc-number">1.3.2.</span> <span class="toc-text">欧几里得相似度(Eucledian Similarity)</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#欧几里得距离定义"><span class="toc-number">1.3.2.1.</span> <span class="toc-text">欧几里得距离定义</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#欧几里得距离公式"><span class="toc-number">1.3.2.2.</span> <span class="toc-text">欧几里得距离公式</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#皮尔逊相似度"><span class="toc-number">1.3.3.</span> <span class="toc-text">皮尔逊相似度</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#皮尔逊积矩相关系数定义"><span class="toc-number">1.3.3.1.</span> <span class="toc-text">皮尔逊积矩相关系数定义</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#皮尔逊积矩相关系数公式"><span class="toc-number">1.3.3.2.</span> <span class="toc-text">皮尔逊积矩相关系数公式</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#余弦相似度-Cosine-Similarity"><span class="toc-number">1.3.4.</span> <span class="toc-text">余弦相似度(Cosine Similarity)</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#两向量间余弦定义"><span class="toc-number">1.3.4.1.</span> <span class="toc-text">两向量间余弦定义</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#两向量间余弦计算公式"><span class="toc-number">1.3.4.2.</span> <span class="toc-text">两向量间余弦计算公式</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#改进的向余弦相似度计算公式"><span class="toc-number">1.3.4.3.</span> <span class="toc-text">改进的向余弦相似度计算公式</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Tanimoto-相似度-Jaccard-系数"><span class="toc-number">1.3.5.</span> <span class="toc-text">Tanimoto 相似度(Jaccard 系数)</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Jaccard-系数公式"><span class="toc-number">1.3.5.1.</span> <span class="toc-text">Jaccard 系数公式</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#预测用户评分公式"><span class="toc-number">1.4.</span> <span class="toc-text">预测用户评分公式</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#构建ItemCFModel"><span class="toc-number">1.5.</span> <span class="toc-text">构建ItemCFModel</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#类定义"><span class="toc-number">1.5.1.</span> <span class="toc-text">类定义</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#相似度度量"><span class="toc-number">1.5.2.</span> <span class="toc-text">相似度度量</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#计算物品相似度"><span class="toc-number">1.5.3.</span> <span class="toc-text">计算物品相似度</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#用户推荐"><span class="toc-number">1.6.</span> <span class="toc-text">用户推荐</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#相似度计算结果展示"><span class="toc-number">1.7.</span> <span class="toc-text">相似度计算结果展示</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#数据来源"><span class="toc-number">1.7.1.</span> <span class="toc-text">数据来源</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#计算出的物品间相似度"><span class="toc-number">1.7.2.</span> <span class="toc-text">计算出的物品间相似度</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#同现相似度结果展示"><span class="toc-number">1.7.2.1.</span> <span class="toc-text">同现相似度结果展示</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#余弦相似度结果展示"><span class="toc-number">1.7.2.2.</span> <span class="toc-text">余弦相似度结果展示</span></a></li></ol></li></ol></li></ol></li></ol></div></div><div class="author-info hide"><div class="author-info__avatar text-center"><img src="https://images.unsplash.com/photo-1519678142103-c78ae3983171?ixlib=rb-0.3.5&amp;ixid=eyJhcHBfaWQiOjEyMDd9&amp;s=11160def9bf74a12fe883ae9d19036aa&amp;auto=format&amp;fit=crop&amp;w=1500&amp;q=80"></div><div class="author-info__name text-center">manlier</div><div class="author-info__description text-center"></div><hr><div class="author-info-articles"><a class="author-info-articles__archives article-meta" href="/archives"><span class="pull-left">文章</span><span class="pull-right">3</span></a><a class="author-info-articles__tags article-meta" href="/tags"><span class="pull-left">标签</span><span class="pull-right">9</span></a><a class="author-info-articles__categories article-meta" href="/categories"><span class="pull-left">分类</span><span class="pull-right">3</span></a></div><hr><div class="author-info-links"><div class="author-info-links__title text-center">友链</div><a class="author-info-links__name text-center" href="https://blog.veir.me/" target="_blank">熊伟的个人博客</a></div></div></div><div id="content-outer"><div id="top-container" style="background-image: url(https://images.unsplash.com/photo-1523255971896-2c08d93dd3a8?ixlib=rb-0.3.5&amp;ixid=eyJhcHBfaWQiOjEyMDd9&amp;s=f1f0f9ab94d2d65d964b1b8681563d93&amp;auto=format&amp;fit=crop&amp;w=1500&amp;q=80)"><div id="page-header"><span class="pull-left"> <a id="site-name" href="/">manlier的个人博客</a></span><i class="fa fa-bars toggle-menu pull-right" aria-hidden="true"></i><span class="pull-right menus"><a class="site-page" href="/">Home</a><a class="site-page" href="/archives">Archives</a><a class="site-page" href="/tags">Tags</a><a class="site-page" href="/categories">Categories</a></span></div><div id="post-info"><div id="post-title">使用Spark DataFrame实现基于物品的协同过滤算法(ItemCF)</div><div id="post-meta"><time class="post-meta__date"><i class="fa fa-calendar" aria-hidden="true"></i> 2018-04-10</time><span class="post-meta__separator">|</span><i class="fa fa-inbox post-meta__icon" aria-hidden="true"></i><a class="post-meta__categories" href="/categories/机器学习/">机器学习</a><i class="fa fa-angle-right" aria-hidden="true"></i><i class="fa fa-inbox post-meta__icon" aria-hidden="true"></i><a class="post-meta__categories" href="/categories/机器学习/spark/">spark</a></div></div></div><div class="layout" id="content-inner"><article id="post"><div id="post-content"><h1 id="使用Spark-DataFrame实现基于物品的协同过滤算法-ItemCF"><a href="#使用Spark-DataFrame实现基于物品的协同过滤算法-ItemCF" class="headerlink" title="使用Spark DataFrame实现基于物品的协同过滤算法(ItemCF)"></a>使用Spark DataFrame实现基于物品的协同过滤算法(ItemCF)</h1><h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2><p>当前spark支持的协同过滤算法只有ALS(基于模型的协同过滤算法)，但ALS算法对于某些特定的问题，效果并不理想，不像mahout提供了各种推荐算法。为了享受到spark在速度上带来的提升同时为满足一些业务需求，遂使用spark构建ItemCF算法。同时spark提供了新的DataFrame数据类型，使算法开发更加清晰和易于实现，</p>
+<h2 id="前提"><a href="#前提" class="headerlink" title="前提"></a>前提</h2><ul>
+<li>本文需要你对基于物品的协同过滤算法（ItemCF）的基本计算过程有一定了解，若未了解过ItemCF，请参阅《<a href="https://www.zybuluo.com/xtccc/note/200979" target="_blank" rel="noopener">基于领域的协同过滤算法 ： UserCF and ItemCF</a>》。</li>
+<li>本文使用spark的DataFrame数据类型进行开发，而非RDD。若不了解DataFrame，请参阅《<a href="https://spark.apache.org/docs/latest/sql-programming-guide.html" target="_blank" rel="noopener">Spark SQL, DataFrames and Datasets Guide</a>》。</li>
+</ul>
+<h2 id="常用相似度计算公式"><a href="#常用相似度计算公式" class="headerlink" title="常用相似度计算公式"></a>常用相似度计算公式</h2><p>协同过滤算法中最重要的部分是要计算物品间的相似度，对于不同的场景，可以应用不同的相似度计算公式来计算相似度，常用的相似度计算公式如下所示：</p>
+<h3 id="同现相似度-Co-Occurrence"><a href="#同现相似度-Co-Occurrence" class="headerlink" title="同现相似度(Co Occurrence)"></a>同现相似度(Co Occurrence)</h3><h4 id="同现相似度公式"><a href="#同现相似度公式" class="headerlink" title="同现相似度公式"></a>同现相似度公式</h4><p>$$ w(x,y)=\frac{|N(x)\cap{N(y)}|}{|N(x)|} $$</p>
+<p>公式中分母是喜欢物品x的用户数，而分子则是同时对物品x和物品y感兴趣的用户数。因此，上述公式可用理解为对物品x感兴趣的用户有多大概率也对y感兴趣  (和关联规则类似)</p>
+<p>但上述的公式存在一个问题，如果物品y是热门物品，有很多人都喜欢，则会导致W(x, y)很大，接近于1。因此会造成任何物品都和热门物品交有很大的相似度。为此我们用如下公式进行修正:</p>
+<h4 id="改进的同现相似度公式"><a href="#改进的同现相似度公式" class="headerlink" title="改进的同现相似度公式"></a>改进的同现相似度公式</h4><p>$$ w(x,y)=\frac{|N(x)\cap{N(y)}|}{\sqrt{|N(x)||N(y)|}} $$</p>
+<p>这个格式惩罚了物品y的权重，因此减轻了热门物品和很多物品相似的可能性。(也归一化了)</p>
+<h3 id="欧几里得相似度-Eucledian-Similarity"><a href="#欧几里得相似度-Eucledian-Similarity" class="headerlink" title="欧几里得相似度(Eucledian Similarity)"></a>欧几里得相似度(Eucledian Similarity)</h3><p>欧几里得相似度根据欧几里得距离计算而来，距离越近相似度越高，反之相反。</p>
+<h4 id="欧几里得距离定义"><a href="#欧几里得距离定义" class="headerlink" title="欧几里得距离定义"></a>欧几里得距离定义</h4><blockquote>
+<p>在数学中，欧几里得距离或欧几里得度量是欧几里得空间中两点间“普通”（即直线）距离。使用这个距离，欧氏空间成为度量空间。相关联的范数称为欧几里得范数。较早的文献称之为毕达哥拉斯度量。</p>
+</blockquote>
+<h4 id="欧几里得距离公式"><a href="#欧几里得距离公式" class="headerlink" title="欧几里得距离公式"></a>欧几里得距离公式</h4><p>$$ \ d_{X,Y}=\sqrt{ \sum_{i=1}^n(x_i-y_i)^2} $$</p>
+<h3 id="皮尔逊相似度"><a href="#皮尔逊相似度" class="headerlink" title="皮尔逊相似度"></a>皮尔逊相似度</h3><p>皮尔逊相关系数，即概率论中的相关系数，取值范围[-1，+1]。当大于零时，两个变量正相关，当小于零时表示两个向量负相关。</p>
+<h4 id="皮尔逊积矩相关系数定义"><a href="#皮尔逊积矩相关系数定义" class="headerlink" title="皮尔逊积矩相关系数定义"></a>皮尔逊积矩相关系数定义</h4><blockquote>
+<p>两个变量之间的皮尔逊相关系数定义为两个变量之间的协方差和标准差的商：</p>
+</blockquote>
+<h4 id="皮尔逊积矩相关系数公式"><a href="#皮尔逊积矩相关系数公式" class="headerlink" title="皮尔逊积矩相关系数公式"></a>皮尔逊积矩相关系数公式</h4><p>$$ \rho_{X,Y}=\frac{cov(X,Y)}{\sigma_{x}\sigma_{y}}=\frac{E((X-\mu_x)(Y-\mu_y))}{\sigma_{x}\sigma_{y}}=\frac{E(XY)-E(X)E(Y)}{\sqrt{E(X^2)-E^2(X)}\sqrt{E(Y^2)-E^2(Y)}} $$</p>
+<h3 id="余弦相似度-Cosine-Similarity"><a href="#余弦相似度-Cosine-Similarity" class="headerlink" title="余弦相似度(Cosine Similarity)"></a>余弦相似度(Cosine Similarity)</h3><p>利用多维空间两点与所设定的点形成夹角的余弦值范围为[-1,1]，值越大，说明夹角越大，两点相距就越远，相似度就越小。</p>
+<h4 id="两向量间余弦定义"><a href="#两向量间余弦定义" class="headerlink" title="两向量间余弦定义"></a>两向量间余弦定义</h4><blockquote>
+<p>多维空间两点与所设定的点形成夹角的余弦值</p>
+</blockquote>
+<h4 id="两向量间余弦计算公式"><a href="#两向量间余弦计算公式" class="headerlink" title="两向量间余弦计算公式"></a>两向量间余弦计算公式</h4><p>$$ \ sim_{X,Y}=\frac{XY}{||X||<em>||Y||}=\frac{ \sum_{i=1}^n(x_i</em>y_i)}{\sqrt{\sum_{i=1}^n(x_i)^2}*\sqrt{\sum_{i=1}^n(y_i)^2}} $$</p>
+<p>公式中$ x_i $表示第i个用户对物品x的评分，$ y_i $同理。<br>该公式只考虑到了用户的评分，很可能评分较高的物品会排在前面而不管物品的其它信息，改进版的余弦相似度计算公式如下：</p>
+<h4 id="改进的向余弦相似度计算公式"><a href="#改进的向余弦相似度计算公式" class="headerlink" title="改进的向余弦相似度计算公式"></a>改进的向余弦相似度计算公式</h4><p>$$ \ sim_{X,Y}=\frac{XY<em>num_{X\cap{Y}}}{||X||</em>||Y||<em>num_{X}</em>log10(10+num_{Y})} $$</p>
+<p>改进公式考虑到了两个向量相同个体个数、X向量大小、Y向量大小，注意：<br>$$ \ sim_{X,Y}\neq sim_{Y,X} $$</p>
+<p><strong>注</strong>：本文并未使用改进般的余弦相似度计算公式</p>
+<h3 id="Tanimoto-相似度-Jaccard-系数"><a href="#Tanimoto-相似度-Jaccard-系数" class="headerlink" title="Tanimoto 相似度(Jaccard 系数)"></a>Tanimoto 相似度(Jaccard 系数)</h3><p>Tanimoto相似度也称为Jaccard系数，是Cosine相似度扩展，多用于文档相似度就算。此相似度不考虑评价值，只考虑两个集合共同个体数量。</p>
+<h4 id="Jaccard-系数公式"><a href="#Jaccard-系数公式" class="headerlink" title="Jaccard 系数公式"></a>Jaccard 系数公式</h4><p>$$ sim(x,y)=\frac{X\cap{Y}}{||X||+||Y||-||X\cap{Y}||} $$</p>
+<h2 id="预测用户评分公式"><a href="#预测用户评分公式" class="headerlink" title="预测用户评分公式"></a>预测用户评分公式</h2><p>$$ pred_{u,p}=\frac{\sum_{i\in{ratedItems(u)}}{sim(i,p)r_{u,i}}}{\sum_{i\in{ratedItems(u)}}{sim(i,p)}} $$</p>
+<p>公式中u指用户，p值物品，ratedItems(u)指用户u评价过的物品，sim指相似度（item之间的），r指用户对物品评分。</p>
+<h2 id="构建ItemCFModel"><a href="#构建ItemCFModel" class="headerlink" title="构建ItemCFModel"></a>构建ItemCFModel</h2><h3 id="类定义"><a href="#类定义" class="headerlink" title="类定义"></a>类定义</h3><figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//  物品信息</span></span><br><span class="line"><span class="keyword">case</span> <span class="class"><span class="keyword">class</span> <span class="title">Item</span>(<span class="params">itemId: <span class="type">Int</span>, itemName: <span class="type">String</span></span>)</span></span><br><span class="line"><span class="class"></span></span><br><span class="line"><span class="class"><span class="title">//</span>  <span class="title">用户-物品-评分</span></span></span><br><span class="line"><span class="class"><span class="title">case</span> <span class="title">class</span> <span class="title">Rating</span>(<span class="params">userId: <span class="type">Int</span>, itemId: <span class="type">Int</span>, rating: <span class="type">Float</span></span>)</span></span><br><span class="line"><span class="class"></span></span><br><span class="line"><span class="class"><span class="title">//</span>  <span class="title">用户信息</span></span></span><br><span class="line"><span class="class"><span class="title">case</span> <span class="title">class</span> <span class="title">User</span>(<span class="params">userId: <span class="type">Int</span>, userName: <span class="type">String</span></span>)</span></span><br></pre></td></tr></table></figure>
+<h3 id="相似度度量"><a href="#相似度度量" class="headerlink" title="相似度度量"></a>相似度度量</h3><figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment">  * SIMILARITY MEASURES</span></span><br><span class="line"><span class="comment">  */</span></span><br><span class="line"><span class="class"><span class="keyword">object</span> <span class="title">SimilarityMeasures</span> </span>&#123;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">    * The Co-occurrence similarity between two vectors A, B is</span></span><br><span class="line"><span class="comment">    * |N(i) ∩ N(j)| / sqrt(|N(i)||N(j)|)</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">cooccurrence</span></span>(numOfRatersForAAndB: <span class="type">Long</span>, numOfRatersForA: <span class="type">Long</span>, numOfRatersForB: <span class="type">Long</span>): <span class="type">Double</span> = &#123;</span><br><span class="line">    numOfRatersForAAndB / math.sqrt(numOfRatersForA * numOfRatersForB)</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">    * The correlation between two vectors A, B is</span></span><br><span class="line"><span class="comment">    * cov(A, B) / (stdDev(A) * stdDev(B))</span></span><br><span class="line"><span class="comment">    *</span></span><br><span class="line"><span class="comment">    * This is equivalent to</span></span><br><span class="line"><span class="comment">    * [n * dotProduct(A, B) - sum(A) * sum(B)] /</span></span><br><span class="line"><span class="comment">    * sqrt&#123; [n * norm(A)^2 - sum(A)^2] [n * norm(B)^2 - sum(B)^2] &#125;</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">correlation</span></span>(size: <span class="type">Double</span>, dotProduct: <span class="type">Double</span>, ratingSum: <span class="type">Double</span>,</span><br><span class="line">                  rating2Sum: <span class="type">Double</span>, ratingNormSq: <span class="type">Double</span>, rating2NormSq: <span class="type">Double</span>): <span class="type">Double</span> = &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">val</span> numerator = size * dotProduct - ratingSum * rating2Sum</span><br><span class="line">    <span class="keyword">val</span> denominator = scala.math.sqrt(size * ratingNormSq - ratingSum * ratingSum) *</span><br><span class="line">      scala.math.sqrt(size * rating2NormSq - rating2Sum * rating2Sum)</span><br><span class="line"></span><br><span class="line">    numerator / denominator</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">    * Regularize correlation by adding virtual pseudocounts over a prior:</span></span><br><span class="line"><span class="comment">    * RegularizedCorrelation = w * ActualCorrelation + (1 - w) * PriorCorrelation</span></span><br><span class="line"><span class="comment">    * where w = # actualPairs / (# actualPairs + # virtualPairs).</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">regularizedCorrelation</span></span>(size: <span class="type">Double</span>, dotProduct: <span class="type">Double</span>, ratingSum: <span class="type">Double</span>,</span><br><span class="line">                             rating2Sum: <span class="type">Double</span>, ratingNormSq: <span class="type">Double</span>, rating2NormSq: <span class="type">Double</span>,</span><br><span class="line">                             virtualCount: <span class="type">Double</span>, priorCorrelation: <span class="type">Double</span>): <span class="type">Double</span> = &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">val</span> unregularizedCorrelation = correlation(size, dotProduct, ratingSum, rating2Sum, ratingNormSq, rating2NormSq)</span><br><span class="line">    <span class="keyword">val</span> w = size / (size + virtualCount)</span><br><span class="line"></span><br><span class="line">    w * unregularizedCorrelation + (<span class="number">1</span> - w) * priorCorrelation</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">    * The cosine similarity between two vectors A, B is</span></span><br><span class="line"><span class="comment">    * dotProduct(A, B) / (norm(A) * norm(B))</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">cosineSimilarity</span></span>(dotProduct: <span class="type">Double</span>, ratingNorm: <span class="type">Double</span>, rating2Norm: <span class="type">Double</span>): <span class="type">Double</span> = &#123;</span><br><span class="line">    dotProduct / (ratingNorm * rating2Norm)</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">    * The Jaccard Similarity between two sets A, B is</span></span><br><span class="line"><span class="comment">    * |Intersection(A, B)| / |Union(A, B)|</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">jaccardSimilarity</span></span>(usersInCommon: <span class="type">Double</span>, totalUsers1: <span class="type">Double</span>, totalUsers2: <span class="type">Double</span>): <span class="type">Double</span> = &#123;</span><br><span class="line">    <span class="keyword">val</span> union = totalUsers1 + totalUsers2 - usersInCommon</span><br><span class="line">    usersInCommon / union</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="计算物品相似度"><a href="#计算物品相似度" class="headerlink" title="计算物品相似度"></a>计算物品相似度</h3><figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">fit</span></span>(ratings: <span class="type">Dataset</span>[<span class="type">Rating</span>]): <span class="type">ItemCFModel</span> = &#123;</span><br><span class="line">    <span class="keyword">this</span>.ratings = <span class="type">Option</span>(ratings)</span><br><span class="line">    <span class="keyword">val</span> numRatersPerItem = ratings.groupBy(<span class="string">"itemId"</span>).count().alias(<span class="string">"nor"</span>)</span><br><span class="line">      .coalesce(defaultParallelism)</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 在原记录基础上加上item的打分者的数量</span></span><br><span class="line">    <span class="keyword">val</span> ratingsWithSize = ratings.join(numRatersPerItem, <span class="string">"itemId"</span>)</span><br><span class="line">      .coalesce(defaultParallelism)</span><br><span class="line"></span><br><span class="line">    <span class="comment">//  执行内联操作</span></span><br><span class="line">    ratingsWithSize.join(ratingsWithSize, <span class="string">"userId"</span>)</span><br><span class="line">      .toDF(<span class="string">"userId"</span>, <span class="string">"item1"</span>, <span class="string">"rating1"</span>, <span class="string">"nor1"</span>, <span class="string">"item2"</span>, <span class="string">"rating2"</span>, <span class="string">"nor2"</span>)</span><br><span class="line">      .selectExpr(<span class="string">"userId"</span></span><br><span class="line">        , <span class="string">"item1"</span>, <span class="string">"rating1"</span>, <span class="string">"nor1"</span></span><br><span class="line">        , <span class="string">"item2"</span>, <span class="string">"rating2"</span>, <span class="string">"nor2"</span></span><br><span class="line">        , <span class="string">"rating1 * rating2 as product"</span></span><br><span class="line">        , <span class="string">"pow(rating1, 2) as rating1Pow"</span></span><br><span class="line">        , <span class="string">"pow(rating2, 2) as rating2Pow"</span>)</span><br><span class="line">      .coalesce(defaultParallelism)</span><br><span class="line">      .createOrReplaceTempView(<span class="string">"joined"</span>)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    <span class="comment">//  计算必要的中间数据，注意此处有WHERE限定，只计算了一半的数据量</span></span><br><span class="line">    <span class="keyword">val</span> sparseMatrix = spark.sql(</span><br><span class="line">      <span class="string">""</span><span class="string">"</span></span><br><span class="line"><span class="string">        |SELECT item1</span></span><br><span class="line"><span class="string">        |, item2</span></span><br><span class="line"><span class="string">        |, count(userId) as size</span></span><br><span class="line"><span class="string">        |, sum(product) as dotProduct</span></span><br><span class="line"><span class="string">        |, sum(rating1) as ratingSum1</span></span><br><span class="line"><span class="string">        |, sum(rating2) as ratingSum2</span></span><br><span class="line"><span class="string">        |, sum(rating1Pow)  as  ratingNorm1</span></span><br><span class="line"><span class="string">        |, sum(rating2Pow)  as  ratingNorm2</span></span><br><span class="line"><span class="string">        |, first(nor1)  as nor1</span></span><br><span class="line"><span class="string">        |, first(nor2)  as nor2</span></span><br><span class="line"><span class="string">        |FROM joined</span></span><br><span class="line"><span class="string">        |WHERE item1 &lt; item2</span></span><br><span class="line"><span class="string">        |GROUP BY item1, item2</span></span><br><span class="line"><span class="string">      "</span><span class="string">""</span>.stripMargin)</span><br><span class="line">      .coalesce(defaultParallelism)</span><br><span class="line">      .cache()</span><br><span class="line"></span><br><span class="line">    <span class="comment">//  计算物品相似度</span></span><br><span class="line">    <span class="keyword">var</span> sim = sparseMatrix.map(row =&gt; &#123;</span><br><span class="line">      <span class="keyword">val</span> size = row.getAs[<span class="type">Long</span>](<span class="number">2</span>)</span><br><span class="line">      <span class="keyword">val</span> dotProduct = row.getAs[<span class="type">Double</span>](<span class="number">3</span>)</span><br><span class="line">      <span class="keyword">val</span> ratingSum1 = row.getAs[<span class="type">Double</span>](<span class="number">4</span>)</span><br><span class="line">      <span class="keyword">val</span> ratingSum2 = row.getAs[<span class="type">Double</span>](<span class="number">5</span>)</span><br><span class="line">      <span class="keyword">val</span> ratingNorm1 = row.getAs[<span class="type">Double</span>](<span class="number">6</span>)</span><br><span class="line">      <span class="keyword">val</span> ratingNorm2 = row.getAs[<span class="type">Double</span>](<span class="number">7</span>)</span><br><span class="line">      <span class="keyword">val</span> numRaters1 = row.getAs[<span class="type">Long</span>](<span class="number">8</span>)</span><br><span class="line">      <span class="keyword">val</span> numRaters2 = row.getAs[<span class="type">Long</span>](<span class="number">9</span>)</span><br><span class="line"></span><br><span class="line">      <span class="keyword">val</span> cooc = cooccurrence(size, numRaters1, numRaters2)</span><br><span class="line">      <span class="keyword">val</span> corr = correlation(size, dotProduct, ratingSum1, ratingSum2, ratingNorm1, ratingNorm2)</span><br><span class="line">      <span class="keyword">val</span> regCorr = regularizedCorrelation(size, dotProduct, ratingSum1, ratingSum2,</span><br><span class="line">        ratingNorm1, ratingNorm2, <span class="type">PRIOR_COUNT</span>, <span class="type">PRIOR_CORRELATION</span>)</span><br><span class="line">      <span class="keyword">val</span> cosSim = cosineSimilarity(dotProduct, scala.math.sqrt(ratingNorm1), scala.math.sqrt(ratingNorm2))</span><br><span class="line">      <span class="keyword">val</span> jaccard = jaccardSimilarity(size, numRaters1, numRaters2)</span><br><span class="line">      (row.getInt(<span class="number">0</span>), row.getInt(<span class="number">1</span>), cooc, corr, regCorr, cosSim, jaccard)</span><br><span class="line">    &#125;).toDF(<span class="string">"itemId_01"</span>, <span class="string">"itemId_02"</span>, <span class="string">"cooc"</span>, <span class="string">"corr"</span>, <span class="string">"regCorr"</span>, <span class="string">"cosSim"</span>, <span class="string">"jaccard"</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment">//  最终的物品相似度</span></span><br><span class="line">    sim.withColumnRenamed(<span class="string">"itemId_01"</span>, <span class="string">"itemId_02"</span>)</span><br><span class="line">      .withColumnRenamed(<span class="string">"itemId_02"</span>, <span class="string">"itemId_01"</span>)</span><br><span class="line">      .union(sim)</span><br><span class="line">      .repartition(defaultParallelism) <span class="comment">//  重新分区，以便数据均匀分布，方便下游用户使用</span></span><br><span class="line">      .cache()</span><br><span class="line">    similarities = <span class="type">Option</span>(sim)</span><br><span class="line">    <span class="keyword">this</span></span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<h2 id="用户推荐"><a href="#用户推荐" class="headerlink" title="用户推荐"></a>用户推荐</h2><figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment">    * 为指定的用户推荐num个物品</span></span><br><span class="line"><span class="comment">    *</span></span><br><span class="line"><span class="comment">    * @param users 用户集</span></span><br><span class="line"><span class="comment">    * @param num   为每个用户推荐的物品数量</span></span><br><span class="line"><span class="comment">    * @return 推荐表</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">recommendForUsers</span></span>(users: <span class="type">Dataset</span>[<span class="type">User</span>], num: <span class="type">Int</span>): <span class="type">DataFrame</span> = &#123;</span><br><span class="line">    <span class="comment">//  similarityMeasure为相似度算法名</span></span><br><span class="line">    <span class="keyword">var</span> sim = similarities.get.select(<span class="string">"itemId_01"</span>, <span class="string">"itemId_02"</span>, similarityMeasure)</span><br><span class="line">    <span class="comment">//  获得评分表</span></span><br><span class="line">    <span class="keyword">val</span> rits = ratings.get</span><br><span class="line"></span><br><span class="line">    <span class="keyword">val</span> project: <span class="type">DataFrame</span> = users</span><br><span class="line">      .selectExpr(<span class="string">"userId as user"</span>, <span class="string">"userName"</span>)</span><br><span class="line">      <span class="comment">//  进行子投影，此处左表数量远小于右表，执行左连接</span></span><br><span class="line">      .join(rits, $<span class="string">"user"</span> &lt;=&gt; rits(<span class="string">"userId"</span>), <span class="string">"left"</span>)</span><br><span class="line">      .drop($<span class="string">"user"</span>)</span><br><span class="line">      <span class="comment">//  选择与用户相关的物品以及评分</span></span><br><span class="line">      .select(<span class="string">"userId"</span>, <span class="string">"itemId"</span>, <span class="string">"rating"</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 获得用户感兴趣的物品与其它物品的相似度</span></span><br><span class="line">    project.join(sim, $<span class="string">"itemId"</span> &lt;=&gt; sim(<span class="string">"itemId_01"</span>))</span><br><span class="line">      .selectExpr(<span class="string">"userId"</span></span><br><span class="line">        , <span class="string">"itemId_01 as relatedItem"</span></span><br><span class="line">        , <span class="string">"itemId_02 as otherItem"</span></span><br><span class="line">        , similarityMeasure</span><br><span class="line">        , <span class="string">s"<span class="subst">$similarityMeasure</span> * rating as simProduct"</span>)</span><br><span class="line">      .coalesce(defaultParallelism)</span><br><span class="line">      .createOrReplaceTempView(<span class="string">"tempTable"</span>)</span><br><span class="line"></span><br><span class="line">    spark.sql(</span><br><span class="line">      <span class="string">s""</span><span class="string">"</span></span><br><span class="line"><span class="string">         |SELECT userId</span></span><br><span class="line"><span class="string">         |,  otherItem</span></span><br><span class="line"><span class="string">         |,  sum(simProduct) / sum($similarityMeasure) as rating</span></span><br><span class="line"><span class="string">         |FROM tempTable</span></span><br><span class="line"><span class="string">         |GROUP BY userId, otherItem</span></span><br><span class="line"><span class="string">         |ORDER BY userId asc, rating desc</span></span><br><span class="line"><span class="string">      "</span><span class="string">""</span>.stripMargin)</span><br><span class="line">      <span class="comment">//  过滤结果</span></span><br><span class="line">      .rdd</span><br><span class="line">      .map(row =&gt; (row.getInt(<span class="number">0</span>), (row.getInt(<span class="number">1</span>), row.getDouble(<span class="number">2</span>))))</span><br><span class="line">      .groupByKey()</span><br><span class="line">      .mapValues(xs =&gt; &#123;</span><br><span class="line">        <span class="keyword">var</span> sequence = <span class="type">Seq</span>[(<span class="type">Int</span>, <span class="type">Double</span>)]()</span><br><span class="line">        <span class="keyword">val</span> iter = xs.iterator</span><br><span class="line">        <span class="keyword">var</span> count = <span class="number">0</span></span><br><span class="line">        <span class="keyword">while</span> (iter.hasNext &amp;&amp; count &lt; num) &#123;</span><br><span class="line">          <span class="keyword">val</span> rat = iter.next()</span><br><span class="line">          <span class="keyword">if</span> (rat._2 != <span class="type">Double</span>.<span class="type">NaN</span>)</span><br><span class="line">            sequence :+= (rat._1, rat._2)</span><br><span class="line">          count += <span class="number">1</span></span><br><span class="line">        &#125;</span><br><span class="line">        sequence</span><br><span class="line">      &#125;)</span><br><span class="line">      .toDF(<span class="string">"userId"</span>, <span class="string">"recommended"</span>)</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<h2 id="相似度计算结果展示"><a href="#相似度计算结果展示" class="headerlink" title="相似度计算结果展示"></a>相似度计算结果展示</h2><h3 id="数据来源"><a href="#数据来源" class="headerlink" title="数据来源"></a>数据来源</h3><p>数据来自<a href="https://grouplens.org/datasets/movielens/100k/" target="_blank" rel="noopener">MovieLens</a>，MovieLens数据集是一个关于电影评分的数据集，里面包含了从IMDB, The Movie DataBase上面得到的用户对电影的评分信息。</p>
+<h3 id="计算出的物品间相似度"><a href="#计算出的物品间相似度" class="headerlink" title="计算出的物品间相似度"></a>计算出的物品间相似度</h3><p>以下展示了使用同现相似度和余弦相似度进行相似度计算后（其它相似度请自行测试）的电影间的相似度，并以《星球大战（1977）》进行测试的结果（只显示了前20个结果）。</p>
+<p>令人惊讶的是余弦相似度的结果似乎不太令人满意，这似乎是因为余弦相似度只和用户评分有关（更适用于推荐5星电影，不关心电影的类型等），也可能是我的算法出现了差错，欢迎反馈。</p>
+<h4 id="同现相似度结果展示"><a href="#同现相似度结果展示" class="headerlink" title="同现相似度结果展示"></a>同现相似度结果展示</h4><table>
+<thead>
+<tr>
+<th>item1</th>
+<th>item2</th>
+<th>coocurrence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>绝地归来（1983）</td>
+<td>0.8828826458931883</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>迷失方舟攻略（1981）</td>
+<td>0.7679353753201742</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>帝国反击，（1980）</td>
+<td>0.7458505006229118</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>教父，The（1972）</td>
+<td>0.7275434127191666</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>法戈（1996）</td>
+<td>0.7239858668831711</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>独立日（ID4）（1996）</td>
+<td>0.723845113716724</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>沉默的羔羊，The（1991）</td>
+<td>0.7025515983155468</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>印第安纳琼斯和最后的十字军东征（1989）</td>
+<td>0.6920306174608959</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>低俗小说（1994）</td>
+<td>0.6885437675802282</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>星际迷航：第一次接触（1996）</td>
+<td>0.6850249237265413</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>回到未来（1985）</td>
+<td>0.6840536741086217</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>逃亡者，The（1993）</td>
+<td>0.6710463728397225</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>摇滚，The（1996）</td>
+<td>0.6646215466055597</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>终结者，The（1984）</td>
+<td>0.6636319257721421</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>阿甘正传（1994）</td>
+<td>0.6564951869930893</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>终结者2：审判日（1991）</td>
+<td>0.653467518885383</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>Princess Bride，The（1987）</td>
+<td>0.6534487891771482</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>异形（1979）</td>
+<td>0.648232034779792</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>E.T。外星（1982）</td>
+<td>0.6479990753086882</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>巨蟒和圣杯（1974）</td>
+<td>0.6476896799641126</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="余弦相似度结果展示"><a href="#余弦相似度结果展示" class="headerlink" title="余弦相似度结果展示"></a>余弦相似度结果展示</h4><p>余弦相似度</p>
+<table>
+<thead>
+<tr>
+<th>item1</th>
+<th>item2</th>
+<th>cosSim</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>Infinity（1996）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>Mostro，Il（1994）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>Boys，Les（1997）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>陌生人，（1994）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>爱是一切（1996）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>巴黎是女人（1995）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>遇难者，A（1937）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>馅饼在天空（1995）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>世纪（1993）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>天使在我的肩膀（1946）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>这里来曲奇（1935）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>力量98（1995）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>滑稽女郎（1943）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>火山（1996）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>难忘的夏天（1994）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>Innocents，The（1961）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>Sleepover（1995）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>木星的妻子（1994）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>我的生活与时代与安东宁·阿托（En compagnie d’Antonin Artaud）（1993）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>星球大战（1977）</td>
+<td>Bent（1997）</td>
+<td>1.0</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</div></article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">manlier</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://glassywing.github.io/2018/04/10/spark-itemcf/">https://glassywing.github.io/2018/04/10/spark-itemcf/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://glassywing.github.io" target="_blank">manlier的个人博客</a>！</span></div></div><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/spark/">spark</a><a class="post-meta__tags" href="/tags/ItemCF/">ItemCF</a><a class="post-meta__tags" href="/tags/协同过滤算法/">协同过滤算法</a><a class="post-meta__tags" href="/tags/基于物品/">基于物品</a></div><nav id="pagination"><div class="next-post pull-right"><a href="/2018/04/01/blog-02/"><span>Ambari 2.6.x 本地仓库搭建和离线安装</span><i class="fa fa-chevron-right"></i></a></div></nav><div id="gitalk-container"></div><script>var gitalk = new Gitalk({
+  clientID: 'd47524b317686dd12c64',
+  clientSecret: '6522b90ff005903c58addd2bc7d461566e2faf2a',
+  repo: 'GlassyWing.github.io',
+  owner: 'GlassyWing',
+  admin: 'GlassyWing',
+  id: md5(decodeURI(location.pathname))
+})
+gitalk.render('gitalk-container')</script></div></div><footer><div class="layout" id="footer"><div class="copyright">&copy;2018 By manlier</div><div class="framework-info"><span>驱动 - </span><a href="http://hexo.io"><span>Hexo</span></a><span class="footer-separator">|</span><span>主题 - </span><a href="https://github.com/Molunerfinn/hexo-theme-melody"><span>Melody</span></a></div><div class="busuanzi"><script async src="//dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script><span id="busuanzi_container_page_pv"><i class="fa fa-file-o"></i><span id="busuanzi_value_page_pv"></span><span></span></span></div></div></footer><i class="fa fa-arrow-up" id="go-up" aria-hidden="true"></i><script src="/js/third-party/anime.min.js"></script><script src="/js/third-party/jquery.min.js"></script><script src="/js/third-party/jquery.fancybox.min.js"></script><script src="/js/third-party/velocity.min.js"></script><script src="/js/third-party/velocity.ui.min.js"></script><script src="/js/utils.js?version=1.5.1"></script><script src="/js/fancybox.js?version=1.5.1"></script><script src="/js/sidebar.js?version=1.5.1"></script><script src="/js/copy.js?version=1.5.1"></script><script src="/js/fireworks.js?version=1.5.1"></script><script src="/js/transition.js?version=1.5.1"></script><script src="/js/scroll.js?version=1.5.1"></script><script src="/js/head.js?version=1.5.1"></script><script type="text/x-mathjax-config">MathJax.Hub.Config({
+  tex2jax: {
+    inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+    processEscapes: true,
+    skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+  }
+});
+</script><script type="text/x-mathjax-config">MathJax.Hub.Queue(function() {
+  var all = MathJax.Hub.getAllJax(), i;
+  for (i=0; i < all.length; i += 1) {
+    all[i].SourceElement().parentNode.className += ' has-jax';
+  }
+});
+</script><script src="https://cdn.bootcss.com/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script></body></html>
