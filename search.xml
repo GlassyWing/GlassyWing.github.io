@@ -46,11 +46,11 @@
       
         <tags>
             
+            <tag> Ubuntu </tag>
+            
             <tag> Ambari </tag>
             
             <tag> 离线安装 </tag>
-            
-            <tag> Ubuntu </tag>
             
         </tags>
       
@@ -71,11 +71,11 @@
       
         <tags>
             
-            <tag> Ubuntu </tag>
-            
             <tag> CDH </tag>
             
             <tag> cloudera manager </tag>
+            
+            <tag> Ubuntu </tag>
             
         </tags>
       
