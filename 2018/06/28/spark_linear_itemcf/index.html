@@ -1,0 +1,134 @@
+<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><meta name="description" content="物品间具有先后关系的ItemCF算法实现"><meta name="keywords" content="ItemCF,协同过滤,智能推荐"><meta name="author" content="manlier,undefined"><meta name="copyright" content="manlier"><title>物品间具有先后关系的ItemCF算法实现 | manlier的个人博客</title><link rel="shortcut icon" href="/favicon.ico"><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.min.css?version=1.5.1"><link rel="stylesheet" type="text/css" href="https://unpkg.com/gitalk/dist/gitalk.css"><script src="https://unpkg.com/gitalk@latest/dist/gitalk.min.js"></script><script src="https://unpkg.com/blueimp-md5@latest/js/md5.min.js"></script><link rel="manifest"><script>(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-116653944-1', 'auto');
+ga('send', 'pageview');</script><script>var GLOBAL = { 
+  root: '/',
+  algolia: undefined,
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  localSearch: {"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}"},"path":"search.xml"}
+} </script></head><body><i class="fa fa-arrow-right" id="toggle-sidebar" aria-hidden="true"></i><div id="sidebar"><div class="toggle-sidebar-info text-center"><span data-toggle="切换文章详情">切换站点概览</span><hr></div><div class="sidebar-toc"><div class="sidebar-toc__title">目录</div><div class="sidebar-toc__progress"><span class="progress-notice">你已经读了</span><span class="progress-num">0</span><span class="progress-percentage">%</span><div class="sidebar-toc__progress-bar"></div></div><div class="sidebar-toc__content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#物品间具有先后关系的ItemCF算法实现"><span class="toc-number">1.</span> <span class="toc-text">物品间具有先后关系的ItemCF算法实现</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#语义"><span class="toc-number">1.1.</span> <span class="toc-text">语义</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#背景"><span class="toc-number">1.2.</span> <span class="toc-text">背景</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#目标"><span class="toc-number">1.3.</span> <span class="toc-text">目标</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#数据存储格式"><span class="toc-number">1.4.</span> <span class="toc-text">数据存储格式</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#用户历史行为日志"><span class="toc-number">1.4.1.</span> <span class="toc-text">用户历史行为日志</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#算法说明"><span class="toc-number">1.5.</span> <span class="toc-text">算法说明</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#相似度度量算法"><span class="toc-number">1.5.1.</span> <span class="toc-text">相似度度量算法</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#同现相似度公式"><span class="toc-number">1.5.1.1.</span> <span class="toc-text">同现相似度公式</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#改进型同现相似度公式"><span class="toc-number">1.5.1.2.</span> <span class="toc-text">改进型同现相似度公式</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#预测用户评分公式"><span class="toc-number">1.5.2.</span> <span class="toc-text">预测用户评分公式</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#算法实现"><span class="toc-number">1.6.</span> <span class="toc-text">算法实现</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#计算过程"><span class="toc-number">1.6.1.</span> <span class="toc-text">计算过程</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#具体实现"><span class="toc-number">1.6.2.</span> <span class="toc-text">具体实现</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#物品相似度计算"><span class="toc-number">1.6.2.1.</span> <span class="toc-text">物品相似度计算</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#对用户进行推荐"><span class="toc-number">1.6.2.2.</span> <span class="toc-text">对用户进行推荐</span></a></li></ol></li></ol></li></ol></li></ol></div></div><div class="author-info hide"><div class="author-info__avatar text-center"><img src="https://images.unsplash.com/photo-1511275539165-cc46b1ee89bf?ixlib=rb-0.3.5&amp;ixid=eyJhcHBfaWQiOjEyMDd9&amp;s=4eed771c93754c026e4a14e74dc3251d&amp;auto=format&amp;fit=crop&amp;w=1950&amp;q=80"></div><div class="author-info__name text-center">manlier</div><div class="author-info__description text-center"></div><hr><div class="author-info-articles"><a class="author-info-articles__archives article-meta" href="/archives"><span class="pull-left">文章</span><span class="pull-right">4</span></a><a class="author-info-articles__tags article-meta" href="/tags"><span class="pull-left">标签</span><span class="pull-right">11</span></a><a class="author-info-articles__categories article-meta" href="/categories"><span class="pull-left">分类</span><span class="pull-right">3</span></a></div><hr><div class="author-info-links"><div class="author-info-links__title text-center">友链</div><a class="author-info-links__name text-center" href="https://blog.veir.me/" target="_blank">熊伟的个人博客</a></div></div></div><div id="content-outer"><div id="top-container" style="background-image: url(https://images.unsplash.com/photo-1484542603127-984f4f7d14cb?ixlib=rb-0.3.5&amp;s=18ebf79d124ce912898685ab627a8ced&amp;auto=format&amp;fit=crop&amp;w=2032&amp;q=80)"><div id="page-header"><span class="pull-left"> <a id="site-name" href="/">manlier的个人博客</a></span><i class="fa fa-bars toggle-menu pull-right" aria-hidden="true"></i><span class="pull-right menus"><a class="site-page" href="/">Home</a><a class="site-page" href="/archives">Archives</a><a class="site-page" href="/tags">Tags</a><a class="site-page" href="/categories">Categories</a></span></div><div id="post-info"><div id="post-title">物品间具有先后关系的ItemCF算法实现</div><div id="post-meta"><time class="post-meta__date"><i class="fa fa-calendar" aria-hidden="true"></i> 2018-06-28</time><span class="post-meta__separator">|</span><i class="fa fa-inbox post-meta__icon" aria-hidden="true"></i><a class="post-meta__categories" href="/categories/机器学习/">机器学习</a></div></div></div><div class="layout" id="content-inner"><article id="post"><div id="post-content"><h1 id="物品间具有先后关系的ItemCF算法实现"><a href="#物品间具有先后关系的ItemCF算法实现" class="headerlink" title="物品间具有先后关系的ItemCF算法实现"></a>物品间具有先后关系的ItemCF算法实现</h1><h2 id="语义"><a href="#语义" class="headerlink" title="语义"></a>语义</h2><ul>
+<li>构件：SOA程序模型设计过程中以实现某种功能的程序片段或模块</li>
+<li>流程：使用多个构件进行线性组合后的以实现某种特定功能的执行过程，即SOA工作流</li>
+</ul>
+<h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>SOA工作流中具有很多的构件，这些构件能以线性方式组合成一条流程（流程按照线性关系被依次执行）。在使用一个构件之后，可随之使用另一个后续的构件，<strong>前一个构件和后一个构件间具有严明的先后关系，即后一个构件不能反向使用前一个构件</strong>，前一个构件可以使用不同的后续构件。</p>
+<p>由于前一个构件使用后可以使用不同的后续构件，对于新用户来说，必须翻阅文档才知道可用的下一个构件，最终才能进行选择。使操作变得相当繁琐，造成大量的时间浪费，因此需要一种能通过以往用户记录为用户推荐下一个可用构件的方式来减轻工作负担。</p>
+<h2 id="目标"><a href="#目标" class="headerlink" title="目标"></a>目标</h2><p>要求用户在工作流中连接一个构件后，推荐出下一个可用的构件，下一个构件按照预测的用户评分从高到低进行排列，并可指定推荐的构件数量。</p>
+<h2 id="数据存储格式"><a href="#数据存储格式" class="headerlink" title="数据存储格式"></a>数据存储格式</h2><h3 id="用户历史行为日志"><a href="#用户历史行为日志" class="headerlink" title="用户历史行为日志"></a>用户历史行为日志</h3><p>用户历史记录以表：<code>history</code>表示，其中<code>userId</code>表示用户ID，<code>compId</code>表示构件ID，<code>folloCompId</code>表示使用了<code>compId</code>后使用的构件ID，<code>count</code>表示用户使用了<code>comp</code>之后又继续使用<code>folloComp</code>的使用次数。</p>
+<table>
+<thead>
+<tr>
+<th>userId</th>
+<th>compId</th>
+<th>followCompId</th>
+<th>count</th>
+<th>timestamp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>3</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>1</td>
+<td>4</td>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+<h2 id="算法说明"><a href="#算法说明" class="headerlink" title="算法说明"></a>算法说明</h2><h3 id="相似度度量算法"><a href="#相似度度量算法" class="headerlink" title="相似度度量算法"></a>相似度度量算法</h3><p>这里我们选择使用同现相似度作为相似度度量标准：</p>
+<h4 id="同现相似度公式"><a href="#同现相似度公式" class="headerlink" title="同现相似度公式"></a>同现相似度公式</h4><p>$$ w(x,y)=\frac{|N(x)\cap{N(y)}|}{|N(x)|} $$</p>
+<p>公式中分母是喜欢物品x的用户数，而分子则是同时对物品x和物品y感兴趣的用户数。因此，上述公式可用理解为对物品x感兴趣的用户有多大概率也对y感兴趣 (和关联规则类似)</p>
+<p>但上述的公式存在一个问题，如果物品y是热门物品，有很多人都喜欢，则会导致W(x, y)很大，接近于1。因此会造成任何物品都和热门物品交有很大的相似度。为此我们用如下公式进行修正:</p>
+<h4 id="改进型同现相似度公式"><a href="#改进型同现相似度公式" class="headerlink" title="改进型同现相似度公式"></a>改进型同现相似度公式</h4><p>$$ w(x,y)=\frac{|N(x)\cap{N(y)}|}{\sqrt{|N(x)||N(y)|}} $$</p>
+<p>这个格式惩罚了物品y的权重，因此减轻了热门物品和很多物品相似的可能性。(也归一化了)</p>
+<h3 id="预测用户评分公式"><a href="#预测用户评分公式" class="headerlink" title="预测用户评分公式"></a>预测用户评分公式</h3><p>$$ pred_{u,p}=\frac{\sum_{i\in{ratedItems(u)}}{sim(i,p)r_{u,i}}}{\sum_{i\in{ratedItems(u)}}{sim(i,p)}} $$</p>
+<p>公式中u指用户，p值物品，ratedItems(u)指用户u评价过的物品，sim指相似度（item之间的），r指用户对使用过的物品i的评分（这里指使用次数）。</p>
+<h2 id="算法实现"><a href="#算法实现" class="headerlink" title="算法实现"></a>算法实现</h2><h3 id="计算过程"><a href="#计算过程" class="headerlink" title="计算过程"></a>计算过程</h3><p>假设现在用户1在流程中连接了一个构件a，在用户历史记录中，构件a之后可用的构件有b和c。根据同现相似度的定义，计算过程如下：</p>
+<ol>
+<li>多少用户使用了a之后使用过b：numAToB</li>
+<li>多少用户使用了a之后使用过c：numAToC</li>
+<li>多少用户使用了a之后既使用过b又使用过c: numAToBC</li>
+<li>通过相似度计算公式计算b和c之间的相似度: simBC</li>
+<li>按照用户评分公式预测用户1对b，c的评分</li>
+<li>按照评分高低从高到低进行排列</li>
+</ol>
+<h3 id="具体实现"><a href="#具体实现" class="headerlink" title="具体实现"></a>具体实现</h3><h4 id="物品相似度计算"><a href="#物品相似度计算" class="headerlink" title="物品相似度计算"></a>物品相似度计算</h4><ol>
+<li><p>统计在使用了第一个构件后又使用第二个构件的用户数量:</p>
+<p> 通过在用户历史原表上按<code>(compId,followCompId)</code>进行聚合计数操作，可以得到在使用了第一个构件后又使用第二个构件的用户数量：</p>
+<p> 表：numRaters</p>
+<p> | compId | followCompId | numRaters |<br> | —— | ———— | ——— |<br> | 1      | 2            | 2         |<br> | 1      | 3            | 1         |<br> | 1      | 4            | 1         |</p>
+</li>
+<li><p>将表<code>numRaters</code>和表<code>history</code>进行内联操作，并忽略掉<code>count</code>：</p>
+<p> 表：historyWithSize</p>
+<p> | userId | compId | followCompId | numRaters |<br> | —— | —— | ———— | ——— |<br> | 1      | 1      | 2            | 2         |<br> | 1      | 1      | 3            | 1         |<br> | 2      | 1      | 2            | 2         |<br> | 2      | 1      | 4            | 1         |</p>
+</li>
+<li><p>将表<code>historyWithSize</code>和表<code>historyWithSize</code>按照<code>(userId, compId)</code>进行内联并按照followCompId1 &lt; followCompId2进行过滤：</p>
+<p> | userId | compId | followCompId1 | numRaters1 | followCompId2 | numRaters2 |<br> | —— | —— | ————- | ———- | ————- | ———- |<br> | 1      | 1      | 2             | 2          | 3             | 1          |<br> | 2      | 1      | 2             | 2          | 4             | 1          |</p>
+</li>
+<li><p>统计在使用过<code>comp</code>后既使用过<code>followComp1</code>又使用过<code>followComp2</code>的用户数，使用列<code>size</code>表示：</p>
+<p> | compId | followCompId1 | numRaters1 | followCompId2 | numRaters2 | size |<br> | —— | ————- | ———- | ————- | ———- | —- |<br> | 1      | 2             | 2          | 3             | 2          | 1    |<br> | 1      | 2             | 2          | 4             | 1          | 1    |</p>
+</li>
+<li><p>计算<code>followComp1</code>和<code>followComp2</code>的相似度：</p>
+<p> 表：<code>similarities</code></p>
+<p> | compId | followCompId1 | followCompId2 | cosSim |<br> | —— | ————- | ————- | —— |<br> | 1      | 2             | 3             | 0.5    |<br> | 1      | 2             | 4             | 0.7    |</p>
+</li>
+</ol>
+<h4 id="对用户进行推荐"><a href="#对用户进行推荐" class="headerlink" title="对用户进行推荐"></a>对用户进行推荐</h4><ol>
+<li><p>要计算用户对物品的兴趣度，需要首先获取用户的历史行为，由于用户连接一个构件后才进行推荐，因此用户历史记录以<code>(userId, compId)</code>进行限制：</p>
+<p> | userId | compId | followCompId | count | timestamp |<br> | —— | —— | ———— | —– | ——— |<br> | 1      | 1      | 2            | 1     |           |<br> | 1      | 1      | 3            | 2     |           |<br> | 2      | 1      | 2            | 1     |           |<br> | 2      | 1      | 4            | 3     |           |</p>
+</li>
+<li><p>将指定用户的历史表<code>history</code>与表<code>similarities</code>按照<code>(compId, followCompId)</code>做内联操作，获得用户感兴趣的物品与其它物品的相似度：</p>
+<p> | userId | compId | followCompId1 | followCompId2 | cosSim | cosSim * count as simProduct |<br> | —— | —— | ————- | ————- | —— | —————————– |<br> | 1      | 1      | 2             | 3             | 0.5    | 0.5                           |<br> | 1      | 1      | 3             | 2             | 0.5    | 0.5                           |<br> | 2      | 1      | 2             | 4             | 0.7    | 2.1                           |<br> | 2      | 1      | 4             | 2             | 0.7    | 2.1                           |</p>
+</li>
+<li><p>按照<code>(userId, compId, followCompId2)</code>分组计算用户对其构件的评分：</p>
+<p> | userId | compId | followCompId2 | sum(simProduct) / sum(cosSim) |<br> | —— | —— | ————- | —————————– |<br> | 1      | 1      | 2             | 1                             |<br> | 1      | 1      | 3             | 1                             |<br> | 2      | 1      | 2             | 3                             |<br> | 2      | 1      | 4             | 3                             |</p>
+</li>
+</ol>
+</div></article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined">manlier</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://glassywing.github.io/2018/06/28/spark_linear_itemcf/">https://glassywing.github.io/2018/06/28/spark_linear_itemcf/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://glassywing.github.io" target="_blank">manlier的个人博客</a>！</span></div></div><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/ItemCF/">ItemCF</a><a class="post-meta__tags" href="/tags/协同过滤/">协同过滤</a><a class="post-meta__tags" href="/tags/智能推荐/">智能推荐</a></div><nav id="pagination"><div class="next-post pull-right"><a href="/2018/04/10/spark-itemcf/"><span>使用Spark DataFrame实现基于物品的协同过滤算法(ItemCF)</span><i class="fa fa-chevron-right"></i></a></div></nav><div id="gitalk-container"></div><script>var gitalk = new Gitalk({
+  clientID: 'd47524b317686dd12c64',
+  clientSecret: '6522b90ff005903c58addd2bc7d461566e2faf2a',
+  repo: 'GlassyWing.github.io',
+  owner: 'GlassyWing',
+  admin: 'GlassyWing',
+  id: md5(decodeURI(location.pathname))
+})
+gitalk.render('gitalk-container')</script></div></div><footer><div class="layout" id="footer"><div class="copyright">&copy;2018 By manlier</div><div class="framework-info"><span>驱动 - </span><a href="http://hexo.io"><span>Hexo</span></a><span class="footer-separator">|</span><span>主题 - </span><a href="https://github.com/Molunerfinn/hexo-theme-melody"><span>Melody</span></a></div><div class="busuanzi"><script async src="//dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script><span id="busuanzi_container_page_pv"><i class="fa fa-file-o"></i><span id="busuanzi_value_page_pv"></span><span></span></span></div></div></footer><i class="fa fa-arrow-up" id="go-up" aria-hidden="true"></i><script src="/js/third-party/anime.min.js"></script><script src="/js/third-party/jquery.min.js"></script><script src="/js/third-party/jquery.fancybox.min.js"></script><script src="/js/third-party/velocity.min.js"></script><script src="/js/third-party/velocity.ui.min.js"></script><script src="/js/utils.js?version=1.5.1"></script><script src="/js/fancybox.js?version=1.5.1"></script><script src="/js/sidebar.js?version=1.5.1"></script><script src="/js/copy.js?version=1.5.1"></script><script src="/js/fireworks.js?version=1.5.1"></script><script src="/js/transition.js?version=1.5.1"></script><script src="/js/scroll.js?version=1.5.1"></script><script src="/js/head.js?version=1.5.1"></script><script type="text/x-mathjax-config">MathJax.Hub.Config({
+  tex2jax: {
+    inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+    processEscapes: true,
+    skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+  }
+});
+</script><script type="text/x-mathjax-config">MathJax.Hub.Queue(function() {
+  var all = MathJax.Hub.getAllJax(), i;
+  for (i=0; i < all.length; i += 1) {
+    all[i].SourceElement().parentNode.className += ' has-jax';
+  }
+});
+</script><script src="https://cdn.bootcss.com/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script></body></html>
